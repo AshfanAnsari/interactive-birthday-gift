@@ -66,7 +66,7 @@ const CANOPY: Bloom[] = (() => {
 })();
 
 /* ══ Scene 1 · the heart and the bow ══════════════════════════════════════ */
-type ShotPhase = 'rest' | 'shot' | 'burst' | 'wipe';
+type ShotPhase = 'play' | 'burst' | 'wipe';
 
 const BURST: Array<[number, number, string, number, boolean]> = [
   // dx, dy, color, size, isHeart
@@ -75,21 +75,102 @@ const BURST: Array<[number, number, string, number, boolean]> = [
   [30, -78, '#ffb74d', 5, false], [-34, -84, '#f8bbd0', 9, true], [66, -58, '#f06292', 8, true],
 ];
 
-function Arrow({ flying }: { flying?: boolean }) {
+const BOW_TIP_TOP = { x: 244, y: 328 };
+const BOW_TIP_BOT = { x: 218, y: 476 };
+const NOCK0 = { x: 238, y: 400 };
+const BASE_ANGLE = -33;
+const HEART_C = { x: 595, y: 215 };
+const clampN = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+
+function ArrowShape() {
   return (
-    <g className={flying ? 'arrow-fly' : undefined}>
-      <line x1="238" y1="406" x2="296" y2="362" stroke="#4e342e" strokeWidth="3" strokeLinecap="round" />
-      <path d="M240 398 L224 402 L236 414 Z" fill="#e53935" />
-      <path d="M246 406 L234 420 L250 416 Z" fill="#e53935" />
-      <circle cx="268" cy="384" r="4.6" fill="none" stroke="#37474f" strokeWidth="2" />
-      <circle cx="297" cy="361" r="4" fill="#f5c518" />
-      <path d="M296 362 L286 362 L292 352 Z" fill="#f5c518" />
+    <g>
+      <line x1="-6" y1="0" x2="72" y2="0" stroke="#4e342e" strokeWidth="2.6" strokeLinecap="round" />
+      <path d="M2 0 L-10 -7 L-4 0 L-10 7 Z" fill="#e53935" />
+      <path d="M8 0 L-2 -8 L3 0 L-2 8 Z" fill="#ef5350" opacity=".85" />
+      <circle cx="34" cy="0" r="4.2" fill="none" stroke="#37474f" strokeWidth="1.8" />
+      <path d="M72 0 L60 -3.6 L60 3.6 Z" fill="#f5c518" />
+      <circle cx="73" cy="0" r="3.4" fill="#f5c518" />
     </g>
   );
 }
 
-function HeartScene({ phase }: { phase: ShotPhase }) {
-  const textsGone = phase !== 'rest';
+function HeartScene({ phase, onHit }: { phase: ShotPhase; onHit: () => void }) {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [aim, setAim] = useState<{ pull: number; theta: number } | null>(null);
+  const [flight, setFlight] = useState<{ nockX: number; nockY: number; theta: number; dist: number; dur: number; hit: boolean } | null>(null);
+  const [arrowGone, setArrowGone] = useState(false);
+  const drag = useRef<{ x: number; y: number } | null>(null);
+  const interacted = useRef(false);
+  const autoTimer = useRef<number | undefined>(undefined);
+
+  const fire = (theta: number, pull: number) => {
+    const rad = (theta * Math.PI) / 180;
+    const u = { x: Math.cos(rad), y: Math.sin(rad) };
+    const nock = flight ? { x: flight.nockX, y: flight.nockY } : { x: NOCK0.x - u.x * pull, y: NOCK0.y - u.y * pull };
+    const t = (HEART_C.x - nock.x) * u.x + (HEART_C.y - nock.y) * u.y;
+    const cx = nock.x + u.x * t, cy = nock.y + u.y * t;
+    const d = Math.hypot(HEART_C.x - cx, HEART_C.y - cy);
+    const hit = d < 95 && t > 0;
+    const dist = hit ? Math.max(60, t - 100) : 780;
+    const dur = clampN(dist / 1500, 0.26, 0.58);
+    setAim(null);
+    setFlight({ nockX: nock.x, nockY: nock.y, theta, dist, dur, hit });
+    window.setTimeout(() => {
+      if (hit) { onHit(); return; }
+      setArrowGone(true);
+      window.setTimeout(() => { setFlight(null); setArrowGone(false); }, 320);
+    }, dur * 1000 + 30);
+  };
+
+  useEffect(() => {
+    if (phase !== 'play') return;
+    autoTimer.current = window.setTimeout(() => {
+      if (!interacted.current) fire(BASE_ANGLE, 46);
+    }, 6500);
+    return () => window.clearTimeout(autoTimer.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
+  const toLocal = (e: React.PointerEvent) => {
+    const svg = svgRef.current!;
+    const pt = new DOMPoint(e.clientX, e.clientY);
+    return pt.matrixTransform(svg.getScreenCTM()!.inverse());
+  };
+  const down = (e: React.PointerEvent) => {
+    if (phase !== 'play' || flight) return;
+    interacted.current = true;
+    window.clearTimeout(autoTimer.current);
+    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+    const p = toLocal(e);
+    drag.current = { x: p.x, y: p.y };
+    setAim({ pull: 0, theta: BASE_ANGLE });
+  };
+  const move = (e: React.PointerEvent) => {
+    if (!drag.current || flight) return;
+    const p = toLocal(e);
+    const dx = p.x - drag.current.x, dy = p.y - drag.current.y;
+    const rad = (BASE_ANGLE * Math.PI) / 180;
+    const u = { x: Math.cos(rad), y: Math.sin(rad) };
+    const perp = { x: -u.y, y: u.x };
+    const pull = clampN(-(dx * u.x + dy * u.y), 0, 74);
+    const theta = BASE_ANGLE + clampN((dx * perp.x + dy * perp.y) * 0.1, -16, 12);
+    setAim({ pull, theta });
+  };
+  const up = () => {
+    if (!drag.current) return;
+    drag.current = null;
+    if (aim && aim.pull >= 16) { fire(aim.theta, aim.pull); return; }
+    setAim(null);
+  };
+
+  const theta = flight ? flight.theta : aim ? aim.theta : BASE_ANGLE;
+  const pull = flight ? 0 : aim ? aim.pull : 0;
+  const rad = (theta * Math.PI) / 180;
+  const u = { x: Math.cos(rad), y: Math.sin(rad) };
+  const nock = flight ? { x: flight.nockX, y: flight.nockY } : { x: NOCK0.x - u.x * pull, y: NOCK0.y - u.y * pull };
+  const textsGone = phase !== 'play' || !!flight;
+
   return (
     <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg,#fffcf7 0%,#fff6ec 55%,#fdeeda 100%)' }}>
       <p className="text-fade absolute font-serifit italic font-semibold"
@@ -101,7 +182,7 @@ function HeartScene({ phase }: { phase: ShotPhase }) {
         PULL &amp; RELEASE
       </p>
 
-      <svg viewBox="0 0 960 540" preserveAspectRatio="xMidYMid slice" className="absolute inset-0 h-full w-full" role="img" aria-label="A glossy pink heart and a cupid bow">
+      <svg ref={svgRef} viewBox="0 0 960 540" preserveAspectRatio="xMidYMid slice" className="absolute inset-0 h-full w-full" role="img" aria-label="A glossy pink heart and a cupid bow. Pull the arrow back and release to shoot.">
         <defs>
           <radialGradient id="heartGrad" cx="38%" cy="26%" r="85%">
             <stop offset="0%" stopColor="#ffd9ec" />
@@ -130,25 +211,46 @@ function HeartScene({ phase }: { phase: ShotPhase }) {
         </g>
 
         {/* burst of mini hearts + gold dots on the hit */}
-        {phase === 'burst' && BURST.map(([dx, dy, c, s, isHeart], i) =>
+        {phase === 'burst' && BURST.map(([dx, dy, c, sz, isHeart], i) =>
           isHeart ? (
             <g key={i} className="sparkle" style={{ ['--dx' as string]: `${dx}px`, ['--dy' as string]: `${dy}px` }}>
-              <path d={HEART} transform={`translate(${520 + dx * 0.15 - s / 2} ${196 + dy * 0.15 - s / 2}) scale(${s / 100})`} fill={c} />
+              <path d={HEART} transform={`translate(${520 + dx * 0.15 - sz / 2} ${196 + dy * 0.15 - sz / 2}) scale(${sz / 100})`} fill={c} />
             </g>
           ) : (
-            <circle key={i} className="sparkle" cx={520} cy={196} r={s / 1.6} fill={c}
+            <circle key={i} className="sparkle" cx={520} cy={196} r={sz / 1.6} fill={c}
               style={{ ['--dx' as string]: `${dx}px`, ['--dy' as string]: `${dy}px` }} />
           ),
         )}
 
-        {/* the bow */}
-        <g transform="translate(232 428) rotate(16)">
-          <path d="M0 -64 C-15 -22 -15 26 -4 68" fill="none" stroke="#5d4037" strokeWidth="5.5" strokeLinecap="round" />
-          <line x1="0" y1="-64" x2="-4" y2="68" stroke="#8d7b74" strokeWidth="1.6" />
-          <line x1="-11" y1="-2" x2="-4" y2="12" stroke="#3e2723" strokeWidth="7" strokeLinecap="round" />
+        {/* the bow — slender recurve, string on the target side */}
+        <g transform="translate(230 400) rotate(12)">
+          <path d="M-4 -78 C-17 -44 -19 -8 -14 22 C-10 46 -5 62 3 78" fill="none" stroke="#5d4037" strokeWidth="4.6" strokeLinecap="round" />
+          <line x1="-14" y1="-4" x2="-9" y2="16" stroke="#3e2723" strokeWidth="6.5" strokeLinecap="round" />
         </g>
-        {phase === 'rest' && <Arrow />}
-        {phase === 'shot' && <Arrow flying />}
+        {/* the string: straight at rest, bent to the nock while aiming */}
+        {aim ? (
+          <polyline points={`${BOW_TIP_TOP.x},${BOW_TIP_TOP.y} ${nock.x},${nock.y} ${BOW_TIP_BOT.x},${BOW_TIP_BOT.y}`}
+            fill="none" stroke="#9a8a84" strokeWidth="1.5" />
+        ) : (
+          <line x1={BOW_TIP_TOP.x} y1={BOW_TIP_TOP.y} x2={BOW_TIP_BOT.x} y2={BOW_TIP_BOT.y} stroke="#9a8a84" strokeWidth="1.5" />
+        )}
+
+        {/* the arrow */}
+        {!arrowGone && (
+          <g transform={`translate(${nock.x} ${nock.y}) rotate(${theta})`}>
+            <g className={flight ? undefined : aim ? undefined : 'nudge'}
+              style={flight ? { transform: `translateX(${flight.dist}px)`, opacity: flight.hit ? 0 : undefined, transition: `transform ${flight.dur}s ease-in, opacity .18s ease ${flight.dur - 0.12}s` } : undefined}>
+              <ArrowShape />
+            </g>
+          </g>
+        )}
+
+        {/* generous grab area over the bow */}
+        {phase === 'play' && !flight && (
+          <rect x="105" y="285" width="290" height="245" fill="transparent"
+            onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
+            style={{ cursor: 'grab', touchAction: 'none' }} />
+        )}
       </svg>
 
       {/* the raspberry circle wipe */}
@@ -319,16 +421,16 @@ type Scene = 'heart' | 'card' | 'tree';
 
 export default function App() {
   const [scene, setScene] = useState<Scene>('heart');
-  const [phase, setPhase] = useState<ShotPhase>('rest');
+  const [phase, setPhase] = useState<ShotPhase>('play');
+
+  const handleHit = () => {
+    setPhase('burst');
+    window.setTimeout(() => setPhase('wipe'), 550);
+    window.setTimeout(() => setScene('card'), 1430);
+  };
 
   useEffect(() => {
-    if (scene !== 'heart') return;
-    setPhase('rest');
-    const t1 = window.setTimeout(() => setPhase('shot'), 1700);
-    const t2 = window.setTimeout(() => setPhase('burst'), 2250);
-    const t3 = window.setTimeout(() => setPhase('wipe'), 2800);
-    const t4 = window.setTimeout(() => setScene('card'), 3680);
-    return () => [t1, t2, t3, t4].forEach((t) => window.clearTimeout(t));
+    if (scene === 'heart') setPhase('play');
   }, [scene]);
 
   useEffect(() => {
@@ -339,7 +441,7 @@ export default function App() {
 
   return (
     <main className="relative h-full w-full overflow-hidden bg-[#fff9f3]">
-      {scene === 'heart' && <HeartScene phase={phase} />}
+      {scene === 'heart' && <HeartScene phase={phase} onHit={handleHit} />}
       {scene === 'card' && <CardScene onDone={() => setScene('tree')} />}
       {scene === 'tree' && <TreeScene />}
     </main>

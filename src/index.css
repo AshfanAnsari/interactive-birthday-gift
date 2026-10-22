@@ -87,3 +87,6 @@ body { -webkit-font-smoothing: antialiased; overflow: hidden; }
   100% { transform: scale(1); }
 }
 .hit-pop { transform-box: fill-box; transform-origin: center; animation: hitPop .5s ease; }
+
+@keyframes nudgeX { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(-5px); } }
+.nudge { animation: nudgeX 1.6s ease-in-out infinite; }
