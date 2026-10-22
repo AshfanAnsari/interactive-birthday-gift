@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 @font-face {
-  font-family: "Great Vibes";
-  src: url("./assets/GreatVibes.woff2") format("woff2");
+  font-family: "Pinyon Script";
+  src: url("./assets/PinyonScript.woff2") format("woff2");
   font-weight: 400;
   font-display: swap;
 }
@@ -11,7 +11,7 @@
 
 @theme {
   --font-display: "Playfair Display", Georgia, serif;
-  --font-script: "Great Vibes", cursive;
+  --font-script: "Pinyon Script", cursive;
   --font-serifit: "Cormorant Garamond", Georgia, serif;
   --font-sans: "Poppins", system-ui, sans-serif;
 }
@@ -54,7 +54,7 @@ body { -webkit-font-smoothing: antialiased; overflow: hidden; }
 @keyframes bob { from { transform: translateY(0); } to { transform: translateY(-11px); } }
 .floaty { transform-box: fill-box; transform-origin: center; opacity: 0; animation: fadeSoft 1s ease forwards, bob 3.4s ease-in-out infinite alternate; }
 
-/* ── Scene 3 · the magenta card ─────────────────────────────────────────── */
+/* ── Scene 3 · the magenta card ──────────────────────────────────────────── */
 @keyframes barInTop { from { transform: translateY(-102%); } to { transform: translateY(0); } }
 @keyframes barInBot { from { transform: translateY(102%); } to { transform: translateY(0); } }
 .bar-top { animation: barInTop .7s cubic-bezier(.3, .7, .3, 1) both; }
@@ -66,3 +66,24 @@ body { -webkit-font-smoothing: antialiased; overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+
+/* ── v2 · frame-accurate additions ───────────────────────────────────────── */
+@keyframes arrowFly {
+  0% { transform: translate(0, 0); opacity: 1; }
+  82% { opacity: 1; }
+  100% { transform: translate(228px, -98px); opacity: 0; }
+}
+.arrow-fly { animation: arrowFly .55s ease-in forwards; }
+
+@keyframes wipeGrow {
+  from { transform: translate(-50%, -50%) scale(0.35); }
+  to { transform: translate(-50%, -50%) scale(95); }
+}
+.wipe-circle { animation: wipeGrow .88s cubic-bezier(.6, 0, .8, .4) forwards; }
+
+@keyframes hitPop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.13); }
+  100% { transform: scale(1); }
+}
+.hit-pop { transform-box: fill-box; transform-origin: center; animation: hitPop .5s ease; }

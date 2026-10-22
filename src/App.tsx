@@ -1,264 +1,347 @@
 import { useEffect, useRef, useState } from 'react';
 
-const HEART = 'M50 84 C20 62 6 44 6 28 C6 13 17 5 29 5 C40 5 47 11 50 19 C53 11 60 5 71 5 C83 5 94 13 94 28 C94 44 80 62 50 84 Z';
-const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
+/**
+ * Interactive Birthday Gift — frame-accurate replica of the @code_wars_official reel.
+ * Spec measured from the reel's own frames (see ../ref/):
+ *  Scene 1 · cream room, glossy heart (62% x, 40% y) with a pink halo, cupid bow at
+ *            lower-left; an arrow shoots, bursts into mini-hearts, then a raspberry
+ *            circle wipes the screen.
+ *  Scene 2 · magenta card: black bars (16vh), serif-italic "make a wish...", the title
+ *            types on TWO lines centered ~58% across, double gold swoosh,
+ *            "to someone worth celebrating", then reverse-types away.
+ *  Scene 3 · peach tree scene: thick plum trunk at 66%, forked branches, a canopy of
+ *            100+ tiny hearts forming one big heart; the .wish text block at
+ *            left:5.5% / bottom:10% — "and... make it count" / "Happy Birthday" /
+ *            "here's to a year that blooms". Loops back to Scene 1.
+ */
+
+const HEART = 'M50 88 C20 62 4 44 4 27 C4 11 16 2 28 2 C39 2 47 8 50 16 C53 8 61 2 72 2 C84 2 96 11 96 27 C96 44 80 62 50 88 Z';
+const FULL = 'Happy Birthday';
 
 function Gloss() {
   return (
     <>
-      <ellipse cx="-14" cy="-18" rx="13" ry="7.5" fill="#fff" opacity=".55" transform="rotate(-24)" />
-      <ellipse cx="-19" cy="-22" rx="6" ry="3.4" fill="#fff" opacity=".85" transform="rotate(-24)" />
+      <ellipse cx="33" cy="29" rx="11" ry="7" fill="#ffffff" opacity=".85" transform="rotate(-18 33 29)" />
+      <ellipse cx="56" cy="17" rx="4.5" ry="2.8" fill="#ffffff" opacity=".45" transform="rotate(-14 56 17)" />
     </>
   );
 }
 
-/* ── Scene 1 · pull & release the heart ────────────────────────────────────── */
-const SPARKS = [
-  [-70, -90, '#f472b6', 5], [-30, -120, '#f5c518', 4], [15, -130, '#f472b6', 6], [60, -105, '#ec4899', 4],
-  [95, -60, '#f5c518', 5], [-105, -40, '#ec4899', 4], [110, -15, '#f472b6', 4], [-95, 5, '#f5c518', 3.5],
-  [40, -80, '#fff', 3.5], [-50, -60, '#fff', 3], [80, -30, '#fff', 3], [0, -95, '#f9a8d4', 4.5],
-] as const;
-
-function HeartScene({ launching, onLaunch }: { launching: boolean; onLaunch: () => void }) {
-  const [pull, setPull] = useState({ x: 0, y: 0 });
-  const svgRef = useRef<SVGSVGElement>(null);
-  const drag = useRef<{ dx: number; dy: number } | null>(null);
-  const touched = useRef(false);
-  const autoTimer = useRef<number | undefined>(undefined);
-
-  useEffect(() => {
-    if (launching) return;
-    autoTimer.current = window.setTimeout(onLaunch, 6500);
-    return () => window.clearTimeout(autoTimer.current);
-  }, [launching, onLaunch]);
-
-  const toLocal = (e: React.PointerEvent) => {
-    const svg = svgRef.current!;
-    const pt = new DOMPoint(e.clientX, e.clientY);
-    return pt.matrixTransform(svg.getScreenCTM()!.inverse());
+/* ── deterministic pseudo-random for the canopy ─────────────────────────── */
+function mulberry(seed: number) {
+  return () => {
+    seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-  const down = (e: React.PointerEvent) => {
-    if (launching) return;
-    touched.current = true;
-    window.clearTimeout(autoTimer.current);
-    (e.target as Element).setPointerCapture?.(e.pointerId);
-    const p = toLocal(e);
-    drag.current = { dx: p.x - pull.x, dy: p.y - pull.y };
+}
+const BLOOM_COLORS = ['#f06292', '#f06292', '#ec407a', '#ec407a', '#ef5350', '#f48fb1', '#f8bbd0', '#ffab40', '#ffb74d', '#fff3e0'];
+type Bloom = { x: number; y: number; s: number; c: number; d: number; r: number };
+const CANOPY: Bloom[] = (() => {
+  const rand = mulberry(20261022);
+  const pts: Bloom[] = [];
+  const place = (t: number, s: number) => {
+    const hx = 16 * Math.pow(Math.sin(t), 3) * s;
+    const hy = 2 + (13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t) - 2) * s;
+    const x = 648 + hx * 13.8 + (rand() - 0.5) * 14;
+    const y = 208 - hy * 13.8 + (rand() - 0.5) * 12;
+    const dist = Math.hypot(x - 634, y - 385);
+    pts.push({
+      x, y,
+      s: 16 + rand() * 18,
+      c: Math.floor(rand() * BLOOM_COLORS.length),
+      d: 2.35 + (dist / 520) * 1.8 + rand() * 0.3,
+      r: (rand() - 0.5) * 24,
+    });
   };
-  const move = (e: React.PointerEvent) => {
-    if (!drag.current || launching) return;
-    const p = toLocal(e);
-    setPull({ x: clamp(p.x - drag.current.dx, -70, 70), y: clamp(p.y - drag.current.dy, -36, 145) });
-  };
-  const up = () => {
-    if (!drag.current) return;
-    drag.current = null;
-    if (pull.y > 62) { onLaunch(); return; }
-    setPull({ x: 0, y: 0 });
-    window.clearTimeout(autoTimer.current);
-    autoTimer.current = window.setTimeout(onLaunch, 5000);
-  };
+  // crisp boundary ring, like the reference's readable heart silhouette
+  for (let i = 0; i < 78; i++) place((i / 78) * Math.PI * 2 + rand() * 0.05, 0.97 + rand() * 0.05);
+  // filled interior
+  let guard = 0;
+  while (pts.length < 235 && guard++ < 6000) {
+    place(rand() * Math.PI * 2, 0.12 + 0.83 * Math.pow(rand(), 0.4));
+  }
+  return pts;
+})();
 
-  const hx = 340 + pull.x, hy = 158 + pull.y;
+/* ══ Scene 1 · the heart and the bow ══════════════════════════════════════ */
+type ShotPhase = 'rest' | 'shot' | 'burst' | 'wipe';
+
+const BURST: Array<[number, number, string, number, boolean]> = [
+  // dx, dy, color, size, isHeart
+  [-46, -52, '#f06292', 13, true], [-18, -68, '#f5c518', 5, false], [14, -62, '#ec407a', 11, true],
+  [44, -44, '#f5c518', 6, false], [58, -12, '#f48fb1', 10, true], [-62, -16, '#ef5350', 10, true],
+  [30, -78, '#ffb74d', 5, false], [-34, -84, '#f8bbd0', 9, true], [66, -58, '#f06292', 8, true],
+];
+
+function Arrow({ flying }: { flying?: boolean }) {
   return (
-    <div className="absolute inset-0" style={{ background: 'radial-gradient(120% 100% at 50% 38%, #fffdf9 0%, #fff9f3 55%, #f6e7da 100%)' }}>
-      <p className="text-fade absolute left-0 right-0 top-[8.5%] text-center font-serifit text-[19px] font-semibold italic tracking-[0.02em] text-[#8a7168]" style={{ opacity: launching ? 0 : 1 }}>
-        a little something for you
+    <g className={flying ? 'arrow-fly' : undefined}>
+      <line x1="238" y1="406" x2="296" y2="362" stroke="#4e342e" strokeWidth="3" strokeLinecap="round" />
+      <path d="M240 398 L224 402 L236 414 Z" fill="#e53935" />
+      <path d="M246 406 L234 420 L250 416 Z" fill="#e53935" />
+      <circle cx="268" cy="384" r="4.6" fill="none" stroke="#37474f" strokeWidth="2" />
+      <circle cx="297" cy="361" r="4" fill="#f5c518" />
+      <path d="M296 362 L286 362 L292 352 Z" fill="#f5c518" />
+    </g>
+  );
+}
+
+function HeartScene({ phase }: { phase: ShotPhase }) {
+  const textsGone = phase !== 'rest';
+  return (
+    <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg,#fffcf7 0%,#fff6ec 55%,#fdeeda 100%)' }}>
+      <p className="text-fade absolute font-serifit italic font-semibold"
+        style={{ left: '49.5%', top: '19%', fontSize: 'clamp(15px,2vw,21px)', color: '#b26e82', opacity: textsGone ? 0 : 1 }}>
+        a little something, for you
       </p>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <svg ref={svgRef} viewBox="0 0 560 400" className="mt-[1vh] w-[min(600px,94vw)]" role="img" aria-label="A pink heart on a slingshot. Pull it down and release.">
-          <defs>
-            <radialGradient id="heartGrad" cx="35%" cy="24%" r="85%">
-              <stop offset="0%" stopColor="#ffd9ec" /><stop offset="38%" stopColor="#faa3cd" />
-              <stop offset="68%" stopColor="#f472b6" /><stop offset="100%" stopColor="#ec4899" />
-            </radialGradient>
-            <radialGradient id="glowGrad" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="#f9a8d4" stopOpacity=".5" /><stop offset="100%" stopColor="#f9a8d4" stopOpacity="0" />
-            </radialGradient>
-          </defs>
+      <p className="text-fade absolute left-1/2 -translate-x-1/2 font-serifit font-semibold"
+        style={{ bottom: '4.2%', fontSize: 12.5, letterSpacing: '.34em', color: '#9c7a72', opacity: textsGone ? 0 : 1 }}>
+        PULL &amp; RELEASE
+      </p>
 
-          {/* slingshot */}
-          <g fill="none" stroke="#8d6e63" strokeWidth="5.5" strokeLinecap="round">
-            <path d="M150 372 C148 322 146 288 138 252" />
-            <path d="M138 252 C131 226 122 208 108 194" />
-            <path d="M138 252 C147 228 158 212 174 202" />
-          </g>
-          <line x1="108" y1="194" x2="141" y2="238" stroke="#97766a" strokeWidth="3.5" />
-          <line x1="174" y1="202" x2="141" y2="238" stroke="#97766a" strokeWidth="3.5" />
-          <g transform="translate(141 240) scale(0.17)"><path d={HEART} transform="translate(-50 -46)" fill="#e91e63" /></g>
+      <svg viewBox="0 0 960 540" preserveAspectRatio="xMidYMid slice" className="absolute inset-0 h-full w-full" role="img" aria-label="A glossy pink heart and a cupid bow">
+        <defs>
+          <radialGradient id="heartGrad" cx="38%" cy="26%" r="85%">
+            <stop offset="0%" stopColor="#ffd9ec" />
+            <stop offset="34%" stopColor="#ff9ec4" />
+            <stop offset="68%" stopColor="#fb6f9e" />
+            <stop offset="100%" stopColor="#ef4d84" />
+          </radialGradient>
+          <radialGradient id="haloGrad" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#f78fb0" stopOpacity=".5" />
+            <stop offset="55%" stopColor="#f78fb0" stopOpacity=".28" />
+            <stop offset="100%" stopColor="#f78fb0" stopOpacity="0" />
+          </radialGradient>
+        </defs>
 
-          {/* the heart */}
-          <g style={{ transform: `translate(${pull.x}px, ${pull.y}px)`, transition: drag.current ? 'none' : 'transform .45s cubic-bezier(.34,1.56,.64,1)' }}>
-            <g className={launching ? 'fly-heart' : undefined} style={{ transformBox: 'fill-box', transformOrigin: 'center' }}>
-              <circle cx="340" cy="158" r="128" fill="url(#glowGrad)" />
-              <g className="pulse-heart" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
-                style={{ cursor: launching ? 'default' : 'grab', touchAction: 'none' }}>
-                <g transform="translate(340 158) scale(1.62)">
-                  <path d={HEART} transform="translate(-50 -46)" fill="url(#heartGrad)" />
-                  <Gloss />
-                </g>
+        {/* halo + heart */}
+        <circle cx="595" cy="215" r="158" fill="url(#haloGrad)" />
+        <g className={phase === 'burst' ? 'hit-pop' : undefined} style={{ transformBox: 'fill-box', transformOrigin: 'center' }}>
+          <g className="pulse-heart">
+            <g transform="translate(595 215) scale(1.5)">
+              <g transform="translate(-50 -46)">
+                <path d={HEART} fill="url(#heartGrad)" />
+                <Gloss />
               </g>
             </g>
           </g>
+        </g>
 
-          {/* sparkles on launch */}
-          {launching && SPARKS.map(([dx, dy, c, r], i) => (
-            <circle key={i} className="sparkle" cx={hx} cy={hy - 20} r={r} fill={c}
-              style={{ '--dx': `${dx}px`, '--dy': `${dy}px`, animationDelay: `${i * 0.03}s` } as React.CSSProperties} />
-          ))}
+        {/* burst of mini hearts + gold dots on the hit */}
+        {phase === 'burst' && BURST.map(([dx, dy, c, s, isHeart], i) =>
+          isHeart ? (
+            <g key={i} className="sparkle" style={{ ['--dx' as string]: `${dx}px`, ['--dy' as string]: `${dy}px` }}>
+              <path d={HEART} transform={`translate(${520 + dx * 0.15 - s / 2} ${196 + dy * 0.15 - s / 2}) scale(${s / 100})`} fill={c} />
+            </g>
+          ) : (
+            <circle key={i} className="sparkle" cx={520} cy={196} r={s / 1.6} fill={c}
+              style={{ ['--dx' as string]: `${dx}px`, ['--dy' as string]: `${dy}px` }} />
+          ),
+        )}
+
+        {/* the bow */}
+        <g transform="translate(232 428) rotate(16)">
+          <path d="M0 -64 C-15 -22 -15 26 -4 68" fill="none" stroke="#5d4037" strokeWidth="5.5" strokeLinecap="round" />
+          <line x1="0" y1="-64" x2="-4" y2="68" stroke="#8d7b74" strokeWidth="1.6" />
+          <line x1="-11" y1="-2" x2="-4" y2="12" stroke="#3e2723" strokeWidth="7" strokeLinecap="round" />
+        </g>
+        {phase === 'rest' && <Arrow />}
+        {phase === 'shot' && <Arrow flying />}
+      </svg>
+
+      {/* the raspberry circle wipe */}
+      {phase === 'wipe' && (
+        <div className="wipe-circle absolute rounded-full"
+          style={{ left: '62%', top: '40%', width: 44, height: 44, background: 'radial-gradient(circle at 42% 40%, #f0658f, #df2a63 78%)' }} />
+      )}
+    </div>
+  );
+}
+
+/* ══ Scene 2 · the magenta card ═══════════════════════════════════════════ */
+function CardScene({ onDone }: { onDone: () => void }) {
+  const [n, setN] = useState(0);
+  const [deleting, setDeleting] = useState(false);
+  const done = useRef(false);
+
+  useEffect(() => {
+    const timers: number[] = [];
+    timers.push(window.setTimeout(() => {
+      let i = 0;
+      const iv = window.setInterval(() => {
+        i += 1; setN(i);
+        if (i >= FULL.length) {
+          window.clearInterval(iv);
+          timers.push(window.setTimeout(() => setDeleting(true), 1500));
+        }
+      }, 90);
+      timers.push(iv as unknown as number);
+    }, 650));
+    return () => timers.forEach((t) => { window.clearTimeout(t); window.clearInterval(t); });
+  }, []);
+
+  useEffect(() => {
+    if (!deleting) return;
+    const iv = window.setInterval(() => {
+      setN((v) => {
+        if (v <= 1) {
+          window.clearInterval(iv);
+          if (!done.current) { done.current = true; window.setTimeout(onDone, 380); }
+          return 0;
+        }
+        return v - 1;
+      });
+    }, 42);
+    return () => window.clearInterval(iv);
+  }, [deleting, onDone]);
+
+  const typed = FULL.slice(0, n);
+  const line1 = typed.slice(0, 5);
+  const line2 = typed.slice(5).trimStart();
+  const complete = n >= FULL.length && !deleting;
+
+  return (
+    <div className="absolute inset-0 overflow-hidden"
+      style={{ background: 'radial-gradient(115% 95% at 30% 38%, #f78fb0 0%, #f0437a 38%, #d81b60 72%, #ad1457 100%)' }}>
+      <div className="bar-top absolute left-0 right-0 top-0 z-[3] h-[16vh]" style={{ background: '#12040b' }} />
+      <div className="bar-bot absolute bottom-0 left-0 right-0 z-[3] h-[16vh]" style={{ background: '#12040b' }} />
+
+      <div className="absolute z-[2] w-full" style={{ left: '58%', top: '50%', transform: 'translate(-50%,-50%)' }}>
+        <p className="fade-soft text-center font-serifit text-[19px] font-semibold italic" style={{ color: '#ffd7e0', animationDelay: '.25s' }}>
+          make a wish...
+        </p>
+        <h1 className="mt-3 text-center font-display font-extrabold leading-[1.04] text-white"
+          style={{ fontSize: 'clamp(54px,12.5vw,130px)', textShadow: '0 3px 14px rgba(90,0,40,.35)' }}>
+          <span className="block min-h-[1.04em]">{line1}</span>
+          <span className="block min-h-[1.04em]">{line2}</span>
+        </h1>
+        <svg viewBox="0 0 460 30" className="mx-auto mt-4 w-[min(430px,60vw)]" aria-hidden="true">
+          <path d="M6 11 C 150 3, 320 5, 452 13" fill="none" stroke="#f5c518" strokeWidth="4.5" strokeLinecap="round"
+            pathLength={100} className={complete ? 'swoosh' : undefined} style={{ strokeDasharray: 100, strokeDashoffset: complete ? undefined : 100 }} />
+          <path d="M118 23 C 220 17, 330 17, 428 21" fill="none" stroke="#f5c518" strokeWidth="4" strokeLinecap="round"
+            pathLength={100} className={complete ? 'swoosh' : undefined} style={{ strokeDasharray: 100, strokeDashoffset: complete ? undefined : 100, animationDelay: '.18s' }} />
         </svg>
       </div>
-      <p className="text-fade absolute bottom-[8%] left-0 right-0 text-center font-sans text-[11px] font-semibold tracking-[0.38em] text-[#8a7168]" style={{ opacity: launching ? 0 : 1, paddingLeft: '0.38em' }}>
-        PULL &amp; RELEASE
+
+      <p className="absolute left-1/2 z-[2] -translate-x-1/2 text-center font-serifit text-[18px] font-semibold italic"
+        style={{ bottom: 'calc(16vh + 20px)', color: '#ffd7e0', opacity: complete ? 1 : 0, transition: 'opacity .6s ease' }}>
+        to someone worth celebrating
       </p>
     </div>
   );
 }
 
-/* ── Scene 2 · the heart tree ──────────────────────────────────────────────── */
-const BRANCHES: [string, number, number, number][] = [
-  // path, strokeWidth, delay, duration
-  ['M338 548 C335 478 331 418 327 354 C325 320 323 292 319 262', 8.5, 0.15, 1.7],
-  ['M326 336 C290 310 254 298 212 300', 4.2, 1.2, 1.2],
-  ['M328 326 C364 302 402 290 444 294', 4.2, 1.35, 1.2],
-  ['M321 302 C292 264 252 242 204 234', 4.2, 1.5, 1.3],
-  ['M323 284 C351 246 390 226 432 220', 4.2, 1.65, 1.3],
-  ['M320 268 C301 224 274 196 240 178', 4, 1.8, 1.2],
-  ['M322 262 C345 216 374 190 408 172', 4, 1.95, 1.2],
-  ['M319 252 C313 206 317 168 307 136', 3.6, 2.1, 1.2],
-  ['M204 234 C182 226 166 208 158 188', 2.2, 2.5, 0.9],
-  ['M432 220 C456 212 469 197 477 179', 2.2, 2.6, 0.9],
-  ['M240 178 C228 158 228 139 235 120', 2.2, 2.7, 0.9],
-  ['M408 172 C420 151 437 141 456 137', 2.2, 2.8, 0.9],
-  ['M307 136 C301 116 304 97 313 80', 2.2, 2.9, 0.9],
-  ['M212 300 C188 296 170 284 160 266', 2.2, 2.45, 0.9],
-  ['M444 294 C468 290 484 278 494 260', 2.2, 2.55, 0.9],
+/* ══ Scene 3 · the heart tree ═════════════════════════════════════════════ */
+const BRANCHES: Array<[string, number, number]> = [
+  // path, stroke width, grow delay (s)
+  ['M636 545 C637 480 636 425 633 368', 15, 0.05],
+  ['M633 372 C610 320 575 285 528 262', 8, 1.15],
+  ['M634 366 C640 315 652 275 678 238', 8, 1.3],
+  ['M635 370 C668 322 706 292 752 272', 8, 1.45],
+  ['M632 380 C600 345 560 322 512 312', 5.5, 1.6],
+  ['M636 378 C672 348 716 330 762 326', 5.5, 1.75],
+  ['M528 262 C506 240 488 226 462 216', 3.2, 2.05],
+  ['M528 262 C520 236 520 214 528 192', 3.2, 2.15],
+  ['M678 238 C672 210 674 186 686 162', 3.2, 2.25],
+  ['M678 238 C696 216 714 204 736 198', 3.2, 2.35],
+  ['M752 272 C776 254 796 244 820 240', 3.2, 2.45],
+  ['M752 272 C762 246 764 224 758 202', 3.2, 2.55],
+  ['M512 312 C486 300 464 296 440 298', 3, 2.6],
+  ['M762 326 C788 318 810 316 834 322', 3, 2.65],
 ];
-const BLOOMS: [number, number, number, string, number][] = [
-  [252, 252, 30, '#f06292', 3.15], [302, 214, 38, '#e91e63', 3.35], [362, 238, 32, '#f472b6', 3.55],
-  [412, 208, 26, '#ef5350', 3.75], [214, 278, 24, '#ec407a', 3.9], [332, 278, 28, '#f06292', 4.05],
-  [388, 272, 22, '#e91e63', 4.2], [272, 302, 20, '#f472b6', 4.35], [352, 182, 22, '#ef5350', 4.5],
-  [300, 158, 18, '#e91e63', 4.62], [424, 258, 18, '#f06292', 4.74], [238, 206, 18, '#ec407a', 4.86],
-  [378, 152, 16, '#f472b6', 4.98], [204, 238, 16, '#e91e63', 5.1], [448, 236, 16, '#ef5350', 5.22],
-  [306, 306, 17, '#ec407a', 5.34], [352, 312, 15, '#f06292', 5.44], [282, 268, 15, '#ef5350', 5.54],
-];
-const FLOATERS: [number, number, number, string, number][] = [
-  [88, 296, 15, '#f48fb1', 4.6], [128, 238, 12, '#f06292', 5.0], [64, 196, 11, '#ec407a', 5.4],
+const FLOATERS: Array<[number, number, number, string, number]> = [
+  [110, 150, 11, '#f6a8c1', 0], [170, 330, 9, '#f6a8c1', 1.2], [88, 438, 10, '#ffd98a', 0.6],
+  [258, 108, 8, '#f6a8c1', 1.8], [872, 462, 9, '#ffd98a', 0.9], [470, 128, 8, '#f6a8c1', 1.5], [566, 472, 10, '#f6a8c1', 0.3],
 ];
 
 function TreeScene() {
-  const FULL = 'Happy Birthday';
-  const [typed, setTyped] = useState(0);
+  const [n, setN] = useState(0);
   useEffect(() => {
     let iv: number | undefined;
     const start = window.setTimeout(() => {
-      iv = window.setInterval(() => setTyped((t) => {
-        if (t >= FULL.length) { window.clearInterval(iv); return t; }
-        return t + 1;
-      }), 95);
-    }, 5000);
-    return () => { window.clearTimeout(start); window.clearInterval(iv); };
+      let i = 0;
+      iv = window.setInterval(() => {
+        i += 1; setN(i);
+        if (i >= FULL.length) window.clearInterval(iv);
+      }, 78);
+    }, 2900);
+    return () => { window.clearTimeout(start); if (iv) window.clearInterval(iv); };
   }, []);
+
   return (
-    <div className="fade-soft absolute inset-0" style={{ background: 'radial-gradient(90% 75% at 50% 60%, #fff8ec 0%, #ffe9c9 45%, #ffd9b3 100%)' }}>
-      <svg viewBox="0 0 640 540" preserveAspectRatio="xMidYMax meet" className="absolute inset-0 h-full w-full" role="img" aria-label="A tree blooming with hearts">
-        <ellipse cx="338" cy="536" rx="110" ry="10" fill="#eec39a" opacity=".55" className="fade-soft" style={{ animationDelay: '.3s' }} />
-        <g fill="none" stroke="#5d4037" strokeLinecap="round">
-          {BRANCHES.map(([d, w, delay, dur], i) => (
-            <path key={i} d={d} strokeWidth={w} pathLength={100} className="draw" style={{ animationDelay: `${delay}s`, animationDuration: `${dur}s` }} />
-          ))}
-        </g>
-        {BLOOMS.map(([x, y, s, c, delay], i) => (
-          <g key={i} transform={`translate(${x} ${y}) scale(${s / 100})`}>
-            <g className="bloom" style={{ animationDelay: `${delay}s` }}>
-              <path d={HEART} transform="translate(-50 -46)" fill={c} /><Gloss />
-            </g>
+    <div className="fade-soft absolute inset-0"
+      style={{ background: 'radial-gradient(120% 105% at 50% 42%, #fffdf7 0%, #fff3e0 52%, #ffe3c2 82%, #ffd9ae 100%)' }}>
+      <svg viewBox="0 0 960 540" preserveAspectRatio="xMidYMid slice" className="absolute inset-0 h-full w-full" role="img" aria-label="A tree whose canopy is a heart made of small hearts">
+        {/* ambient floaters */}
+        {FLOATERS.map(([x, y, s, c, dl], i) => (
+          <g key={`f${i}`} className="floaty" style={{ animationDelay: `${dl}s, ${dl}s` }}>
+            <path d={HEART} transform={`translate(${x - s / 2} ${y - s / 2}) scale(${s / 100})`} fill={c} opacity=".65" />
           </g>
         ))}
-        {FLOATERS.map(([x, y, s, c, delay], i) => (
-          <g key={i} transform={`translate(${x} ${y}) scale(${s / 100})`}>
-            <g className="floaty" style={{ animationDelay: `${delay}s, ${delay}s` }}>
-              <path d={HEART} transform="translate(-50 -46)" fill={c} />
+
+        {/* trunk + branches */}
+        {BRANCHES.map(([d, w, dl], i) => (
+          <path key={i} d={d} fill="none" stroke="#4a2c33" strokeWidth={w} strokeLinecap="round"
+            pathLength={100} className="draw" style={{ animationDelay: `${dl}s`, animationDuration: i === 0 ? '1.5s' : '0.95s' }} />
+        ))}
+
+        {/* the heart canopy */}
+        {CANOPY.map((p, i) => (
+          <g key={i} className="bloom" style={{ animationDelay: `${p.d}s` }}>
+            <g transform={`translate(${p.x} ${p.y}) rotate(${p.r})`}>
+              <path d={HEART} transform={`translate(${-p.s / 2} ${-p.s / 2}) scale(${p.s / 100})`} fill={BLOOM_COLORS[p.c]} />
+              <ellipse cx={-p.s * 0.16} cy={-p.s * 0.14} rx={p.s * 0.13} ry={p.s * 0.08} fill="#ffffff" opacity=".5" transform={`rotate(-18 ${-p.s * 0.16} ${-p.s * 0.14})`} />
             </g>
           </g>
         ))}
       </svg>
-      <div className="absolute" style={{ left: '5.5%', bottom: '10%', maxWidth: '46%' }}>
-        <p className="fade-soft font-serifit text-[15px] font-semibold italic text-[#8a7168]" style={{ animationDelay: '4.6s' }}>and... make it count</p>
-        <p className="font-script leading-[1.05] text-[#c2185b]" style={{ fontSize: 'clamp(38px, 6.2vw, 64px)', minHeight: '1.05em' }}>
-          {FULL.slice(0, typed)}
-        </p>
-      </div>
-    </div>
-  );
-}
 
-/* ── Scene 3 · the magenta card ────────────────────────────────────────────── */
-function CardScene({ onDone }: { onDone: () => void }) {
-  const FULL = 'Happy Birthday';
-  const [n, setN] = useState(0);
-  const done = useRef(onDone);
-  done.current = onDone;
-  useEffect(() => {
-    const timers: number[] = [];
-    let iv: number | undefined;
-    const later = (fn: () => void, ms: number) => { timers.push(window.setTimeout(fn, ms)); };
-    later(() => {
-      iv = window.setInterval(() => setN((v) => {
-        if (v >= FULL.length) {
-          window.clearInterval(iv);
-          later(() => {
-            iv = window.setInterval(() => setN((w) => {
-              if (w <= 0) { window.clearInterval(iv); later(() => done.current(), 500); return 0; }
-              return w - 1;
-            }), 55);
-          }, 3400);
-          return v;
-        }
-        return v + 1;
-      }), 105);
-    }, 800);
-    return () => { timers.forEach(clearTimeout); window.clearInterval(iv); };
-  }, []);
-  const full = n >= FULL.length;
-  return (
-    <div className="absolute inset-0" style={{ background: 'radial-gradient(120% 90% at 32% 42%, #fb7185 0%, #f43f5e 34%, #be185d 68%, #9d174d 100%)' }}>
-      <div className="bar-top absolute left-0 right-0 top-0 z-[3] h-[16vh] bg-[#12040b]" />
-      <div className="bar-bot absolute bottom-0 left-0 right-0 z-[3] h-[16vh] bg-[#12040b]" />
-      <p className="fade-soft absolute left-0 right-0 z-[2] text-center font-script text-[24px] text-[#ffe4e6]/90" style={{ top: 'calc(16vh + 24px)', animationDelay: '.55s' }}>
-        make a wish...
-      </p>
-      <div className="absolute inset-0 z-[2] flex flex-col items-center justify-center">
-        <h1 className="font-display text-center font-bold text-white" style={{ fontSize: 'clamp(46px, 9vw, 104px)', minHeight: '1.15em', textShadow: '0 6px 30px rgba(80,7,36,.35)' }}>
+      {/* the .wish block — left:5.5%, bottom:10%, max-width:46% */}
+      <div className="absolute" style={{ left: '5.5%', bottom: '9%', maxWidth: '46%', color: '#5d4037' }}>
+        <p className="fade-soft font-serifit text-[17px] font-semibold italic" style={{ animationDelay: '2.6s' }}>
+          and... make it count
+        </p>
+        <p className="font-script leading-[1.15]" style={{ fontSize: 'clamp(42px,6.9vw,80px)', color: '#c2185b' }}>
           {FULL.slice(0, n)}
-        </h1>
-        <svg viewBox="0 0 430 26" className="mt-1 w-[min(430px,62vw)]" aria-hidden>
-          {full && <path d="M8 16 C110 4 260 26 422 10" fill="none" stroke="#f5c518" strokeWidth="5" strokeLinecap="round" pathLength={100} className="swoosh" />}
-        </svg>
-      </div>
-      {full && (
-        <p className="fade-soft absolute bottom-0 left-0 right-0 z-[2] text-center font-script text-[24px] text-[#ffe4e6]/90" style={{ bottom: 'calc(16vh + 24px)' }}>
-          to someone worth celebrating
         </p>
-      )}
+        <p className="fade-soft font-serifit text-[16.5px] font-medium" style={{ animationDelay: '4.9s', color: '#8a7368' }}>
+          here&rsquo;s to a year that blooms
+        </p>
+      </div>
     </div>
   );
 }
 
-/* ── The loop ──────────────────────────────────────────────────────────────── */
+/* ══ App · the loop: heart → card → tree ══════════════════════════════════ */
+type Scene = 'heart' | 'card' | 'tree';
+
 export default function App() {
-  const [phase, setPhase] = useState<'heart' | 'launch' | 'tree' | 'card'>('heart');
+  const [scene, setScene] = useState<Scene>('heart');
+  const [phase, setPhase] = useState<ShotPhase>('rest');
+
   useEffect(() => {
-    if (phase === 'launch') { const t = setTimeout(() => setPhase('tree'), 1000); return () => clearTimeout(t); }
-    if (phase === 'tree') { const t = setTimeout(() => setPhase('card'), 11800); return () => clearTimeout(t); }
-  }, [phase]);
+    if (scene !== 'heart') return;
+    setPhase('rest');
+    const t1 = window.setTimeout(() => setPhase('shot'), 1700);
+    const t2 = window.setTimeout(() => setPhase('burst'), 2250);
+    const t3 = window.setTimeout(() => setPhase('wipe'), 2800);
+    const t4 = window.setTimeout(() => setScene('card'), 3680);
+    return () => [t1, t2, t3, t4].forEach((t) => window.clearTimeout(t));
+  }, [scene]);
+
+  useEffect(() => {
+    if (scene !== 'tree') return;
+    const t = window.setTimeout(() => setScene('heart'), 9800);
+    return () => window.clearTimeout(t);
+  }, [scene]);
+
   return (
-    <main className="relative h-full w-full select-none overflow-hidden">
-      {(phase === 'heart' || phase === 'launch') && (
-        <HeartScene launching={phase === 'launch'} onLaunch={() => setPhase('launch')} />
-      )}
-      {phase === 'tree' && <TreeScene />}
-      {phase === 'card' && <CardScene onDone={() => setPhase('heart')} />}
+    <main className="relative h-full w-full overflow-hidden bg-[#fff9f3]">
+      {scene === 'heart' && <HeartScene phase={phase} />}
+      {scene === 'card' && <CardScene onDone={() => setScene('tree')} />}
+      {scene === 'tree' && <TreeScene />}
     </main>
   );
 }
