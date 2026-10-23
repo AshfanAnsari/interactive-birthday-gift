@@ -97,13 +97,13 @@ type BowLayout = {
 };
 const BOW_LAND: BowLayout = {
   vb: '0 0 960 540', heart: { x: 595, y: 215, s: 1.5 },
-  nock: { x: 238, y: 400 },
+  nock: { x: 222, y: 398 },
   bow: { x: 230, y: 400 }, tilt: 12, angle: -33, grab: { x: 105, y: 285, w: 290, h: 245 },
   wipe: { left: '62%', top: '40%' }, burst: { x: 520, y: 196 },
 };
 const BOW_PORT: BowLayout = {
   vb: '0 0 540 860', heart: { x: 322, y: 308, s: 1.42 },
-  nock: { x: 132, y: 650 },
+  nock: { x: 120, y: 654 },
   bow: { x: 128, y: 652 }, tilt: -13, angle: -58, grab: { x: 30, y: 545, w: 235, h: 240 },
   wipe: { left: '59.6%', top: '35.8%' }, burst: { x: 258, y: 250 },
 };
@@ -204,8 +204,8 @@ function HeartScene({ phase, onHit, portrait }: { phase: ShotPhase; onHit: () =>
     const r = (phi * Math.PI) / 180, c = Math.cos(r), s = Math.sin(r);
     return { x: L.bow.x + x * c - y * s, y: L.bow.y + x * s + y * c };
   };
-  const tipTop = rotPt(-4, -78);
-  const tipBot = rotPt(3, 78);
+  const tipTop = rotPt(-9, -78);
+  const tipBot = rotPt(-9, 78);
 
   return (
     <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg,#fffcf7 0%,#fff6ec 55%,#fdeeda 100%)' }}>
@@ -262,14 +262,27 @@ function HeartScene({ phase, onHit, portrait }: { phase: ShotPhase; onHit: () =>
 
         {/* the bow — slender recurve, string on the target side */}
         <g transform={`translate(${L.bow.x} ${L.bow.y}) rotate(${phi})`}>
-          <path d="M-4 -78 C-17 -44 -19 -8 -14 22 C-10 46 -5 62 3 78" fill="none" stroke="#5d4037" strokeWidth="4.6" strokeLinecap="round" />
-          <line x1="-14" y1="-4" x2="-9" y2="16" stroke="#3e2723" strokeWidth="6.5" strokeLinecap="round" />
+          <path d="M-9 -78 C-5 -68 0 -56 2 -42 C6 -27 8 -13 8 0 C8 13 6 27 2 42 C0 56 -5 68 -9 78" fill="none" stroke="#6b5747" strokeWidth="4.6" strokeLinecap="round" />
+          {/* wrapped limb bands: red-black-red partway along each limb */}
+          <path d="M-1.5 -56 C-0.5 -53 0 -50 0.3 -47" fill="none" stroke="#a03d31" strokeWidth="5.2" />
+          <path d="M0.3 -50 C0.8 -47 1.2 -44 1.8 -41" fill="none" stroke="#26201c" strokeWidth="5.2" />
+          <path d="M1.8 -44 C2.2 -41 2.6 -38 3 -35" fill="none" stroke="#a03d31" strokeWidth="5.2" />
+          <path d="M3 35 C2.6 38 2.2 41 1.8 44" fill="none" stroke="#a03d31" strokeWidth="5.2" />
+          <path d="M1.8 41 C1.2 44 0.8 47 0.3 50" fill="none" stroke="#26201c" strokeWidth="5.2" />
+          <path d="M0.3 47 C0 50 -0.5 53 -1.5 56" fill="none" stroke="#a03d31" strokeWidth="5.2" />
+          {/* brick-red bands flanking the grip */}
+          <path d="M6.4 -21 C7 -18.5 7.4 -16 7.7 -13.5" fill="none" stroke="#a03d31" strokeWidth="6" />
+          <path d="M7.7 13.5 C7.4 16 7 18.5 6.4 21" fill="none" stroke="#a03d31" strokeWidth="6" />
+          {/* dark leather grip with tan cross-lacing */}
+          <path d="M7.7 -13.5 C8.3 -6 8.3 6 7.7 13.5" fill="none" stroke="#33241c" strokeWidth="8" strokeLinecap="round" />
+          <path d="M4.6 -10.5 L10.9 6.5 M10.9 -10.5 L4.6 6.5 M4.6 -3.5 L10.9 10.5 M10.9 -3.5 L4.6 -10.5" stroke="#c9a86a" strokeWidth="1.1" fill="none" opacity=".85" />
+          <circle cx="8.6" cy="-16.8" r="1.8" fill="#4e7a3a" />
         </g>
         {aim ? (
           <polyline points={`${tipTop.x},${tipTop.y} ${nock.x},${nock.y} ${tipBot.x},${tipBot.y}`}
-            fill="none" stroke="#9a8a84" strokeWidth="1.5" />
+            fill="none" stroke="#b49b72" strokeWidth="1.5" />
         ) : (
-          <line x1={tipTop.x} y1={tipTop.y} x2={tipBot.x} y2={tipBot.y} stroke="#9a8a84" strokeWidth="1.5" />
+          <line x1={tipTop.x} y1={tipTop.y} x2={tipBot.x} y2={tipBot.y} stroke="#b49b72" strokeWidth="1.5" />
         )}
 
         {/* the arrow */}
