@@ -168,7 +168,6 @@ function HeartScene({ phase, onHit, portrait }: { phase: ShotPhase; onHit: () =>
     if (phase !== 'play' || flight) return;
     interacted.current = true;
     window.clearTimeout(autoTimer.current);
-    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
     const p = toLocal(e);
     drag.current = { x: p.x, y: p.y };
     setAim({ pull: 0, theta: L.angle });
@@ -190,6 +189,23 @@ function HeartScene({ phase, onHit, portrait }: { phase: ShotPhase; onHit: () =>
     if (aim && aim.pull >= 16) { fire(aim.theta, aim.pull); return; }
     setAim(null);
   };
+
+  const moveRef = useRef(move);
+  moveRef.current = move;
+  const upRef = useRef(up);
+  upRef.current = up;
+  useEffect(() => {
+    const mv = (e: PointerEvent) => moveRef.current(e as unknown as React.PointerEvent);
+    const upFn = () => upRef.current();
+    window.addEventListener('pointermove', mv);
+    window.addEventListener('pointerup', upFn);
+    window.addEventListener('pointercancel', upFn);
+    return () => {
+      window.removeEventListener('pointermove', mv);
+      window.removeEventListener('pointerup', upFn);
+      window.removeEventListener('pointercancel', upFn);
+    };
+  }, []);
 
   const theta = flight ? flight.theta : aim ? aim.theta : L.angle;
   const pull = flight ? 0 : aim ? aim.pull : 0;
@@ -298,7 +314,7 @@ function HeartScene({ phase, onHit, portrait }: { phase: ShotPhase; onHit: () =>
         {/* generous grab area over the bow */}
         {phase === 'play' && !flight && (
           <rect x={L.grab.x} y={L.grab.y} width={L.grab.w} height={L.grab.h} fill="transparent"
-            onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
+            onPointerDown={down}
             style={{ cursor: 'grab', touchAction: 'none' }} />
         )}
       </svg>
@@ -513,7 +529,7 @@ export default function App() {
   }, [scene]);
 
   return (
-    <main className="relative h-full w-full overflow-hidden bg-[#fff9f3]">
+    <main className="relative h-full w-full overflow-hidden bg-[#fff9f3]" style={{ touchAction: 'none' }}>
       {scene === 'heart' && <HeartScene phase={phase} onHit={handleHit} portrait={portrait} />}
       {scene === 'card' && <CardScene onDone={() => setScene('tree')} portrait={portrait} />}
       {scene === 'tree' && <TreeScene portrait={portrait} />}
