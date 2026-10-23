@@ -90,3 +90,7 @@ body { -webkit-font-smoothing: antialiased; overflow: hidden; }
 
 @keyframes nudgeX { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(-5px); } }
 .nudge { animation: nudgeX 1.6s ease-in-out infinite; }
+
+/* full-screen interactive piece: never let the browser turn a drag into a
+   scroll / pull-to-refresh (that cancels the pointer mid-pull) */
+html, body { overscroll-behavior: none; }
