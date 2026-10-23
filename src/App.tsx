@@ -87,10 +87,9 @@ const BURST: Array<[number, number, string, number, boolean]> = [
 type BowLayout = {
   vb: string;
   heart: { x: number; y: number; s: number };
-  tipTop: { x: number; y: number };
-  tipBot: { x: number; y: number };
   nock: { x: number; y: number };
   bow: { x: number; y: number };
+  tilt: number;
   angle: number;
   grab: { x: number; y: number; w: number; h: number };
   wipe: { left: string; top: string };
@@ -98,14 +97,14 @@ type BowLayout = {
 };
 const BOW_LAND: BowLayout = {
   vb: '0 0 960 540', heart: { x: 595, y: 215, s: 1.5 },
-  tipTop: { x: 244, y: 328 }, tipBot: { x: 218, y: 476 }, nock: { x: 238, y: 400 },
-  bow: { x: 230, y: 400 }, angle: -33, grab: { x: 105, y: 285, w: 290, h: 245 },
+  nock: { x: 238, y: 400 },
+  bow: { x: 230, y: 400 }, tilt: 12, angle: -33, grab: { x: 105, y: 285, w: 290, h: 245 },
   wipe: { left: '62%', top: '40%' }, burst: { x: 520, y: 196 },
 };
 const BOW_PORT: BowLayout = {
   vb: '0 0 540 860', heart: { x: 322, y: 308, s: 1.42 },
-  tipTop: { x: 140, y: 575 }, tipBot: { x: 115, y: 729 }, nock: { x: 136, y: 650 },
-  bow: { x: 128, y: 652 }, angle: -58, grab: { x: 25, y: 535, w: 250, h: 240 },
+  nock: { x: 132, y: 650 },
+  bow: { x: 128, y: 652 }, tilt: -13, angle: -58, grab: { x: 30, y: 545, w: 235, h: 240 },
   wipe: { left: '59.6%', top: '35.8%' }, burst: { x: 258, y: 250 },
 };
 
@@ -198,6 +197,15 @@ function HeartScene({ phase, onHit, portrait }: { phase: ShotPhase; onHit: () =>
   const u = { x: Math.cos(rad), y: Math.sin(rad) };
   const nock = flight ? { x: flight.nockX, y: flight.nockY } : { x: L.nock.x - u.x * pull, y: L.nock.y - u.y * pull };
   const textsGone = phase !== 'play' || !!flight;
+  // The bow tracks the aim; the string tips are the limb ends under that same
+  // rotation, so string, limb and arrow stay coherent at every pull angle.
+  const phi = L.tilt + (theta - L.angle);
+  const rotPt = (x: number, y: number) => {
+    const r = (phi * Math.PI) / 180, c = Math.cos(r), s = Math.sin(r);
+    return { x: L.bow.x + x * c - y * s, y: L.bow.y + x * s + y * c };
+  };
+  const tipTop = rotPt(-4, -78);
+  const tipBot = rotPt(3, 78);
 
   return (
     <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg,#fffcf7 0%,#fff6ec 55%,#fdeeda 100%)' }}>
@@ -253,15 +261,15 @@ function HeartScene({ phase, onHit, portrait }: { phase: ShotPhase; onHit: () =>
         )}
 
         {/* the bow — slender recurve, string on the target side */}
-        <g transform={`translate(${L.bow.x} ${L.bow.y}) rotate(12)`}>
+        <g transform={`translate(${L.bow.x} ${L.bow.y}) rotate(${phi})`}>
           <path d="M-4 -78 C-17 -44 -19 -8 -14 22 C-10 46 -5 62 3 78" fill="none" stroke="#5d4037" strokeWidth="4.6" strokeLinecap="round" />
           <line x1="-14" y1="-4" x2="-9" y2="16" stroke="#3e2723" strokeWidth="6.5" strokeLinecap="round" />
         </g>
         {aim ? (
-          <polyline points={`${L.tipTop.x},${L.tipTop.y} ${nock.x},${nock.y} ${L.tipBot.x},${L.tipBot.y}`}
+          <polyline points={`${tipTop.x},${tipTop.y} ${nock.x},${nock.y} ${tipBot.x},${tipBot.y}`}
             fill="none" stroke="#9a8a84" strokeWidth="1.5" />
         ) : (
-          <line x1={L.tipTop.x} y1={L.tipTop.y} x2={L.tipBot.x} y2={L.tipBot.y} stroke="#9a8a84" strokeWidth="1.5" />
+          <line x1={tipTop.x} y1={tipTop.y} x2={tipBot.x} y2={tipBot.y} stroke="#9a8a84" strokeWidth="1.5" />
         )}
 
         {/* the arrow */}
